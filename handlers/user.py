@@ -18,9 +18,22 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.message_handler(commands=['start'])
     def start(message):
+
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🛍 المتجر", callback_data="shop"))
-        markup.add(InlineKeyboardButton("📦 طلباتي", callback_data="my_orders"))
+
+        markup.add(
+            InlineKeyboardButton(
+                "🛍 المتجر",
+                callback_data="shop"
+            )
+        )
+
+        markup.add(
+            InlineKeyboardButton(
+                "📦 طلباتي",
+                callback_data="my_orders"
+            )
+        )
 
         bot.send_message(
             message.chat.id,
@@ -35,20 +48,28 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda c: c.data == "shop")
     def shop_cb(call):
+
         bot.answer_callback_query(call.id)
+
         show_shop(call.message.chat.id)
 
     def show_shop(chat_id):
+
         products = get_all_products()
 
         if not products:
-            bot.send_message(chat_id, "❌ لا توجد منتجات متاحة حالياً.")
+            bot.send_message(
+                chat_id,
+                "❌ لا توجد منتجات متاحة حالياً."
+            )
             return
 
         markup = InlineKeyboardMarkup()
 
         for p in products:
+
             pid, name, desc, price_usd, stock, active = p
+
             cnt = get_stock_count(pid)
 
             if cnt > 0:
@@ -80,7 +101,10 @@ def register_user_handlers(bot: telebot.TeleBot):
         p = get_product(product_id)
 
         if not p:
-            bot.send_message(call.message.chat.id, "❌ المنتج غير موجود.")
+            bot.send_message(
+                call.message.chat.id,
+                "❌ المنتج غير موجود."
+            )
             return
 
         pid, name, desc, price_usd, stock, active = p
@@ -124,20 +148,29 @@ def register_user_handlers(bot: telebot.TeleBot):
     @bot.callback_query_handler(func=lambda c: c.data.startswith("buy_"))
     def buy_product(call):
 
-        bot.answer_callback_query(call.id, "⏳ جاري إنشاء الفاتورة...")
+        bot.answer_callback_query(
+            call.id,
+            "⏳ جاري إنشاء الفاتورة..."
+        )
 
         product_id = int(call.data.split("_")[1])
 
         p = get_product(product_id)
 
         if not p:
-            bot.send_message(call.message.chat.id, "❌ المنتج غير موجود.")
+            bot.send_message(
+                call.message.chat.id,
+                "❌ المنتج غير موجود."
+            )
             return
 
         pid, name, desc, price_usd, stock, active = p
 
         if get_stock_count(pid) == 0:
-            bot.send_message(call.message.chat.id, "❌ هذا المنتج نفد من المخزون.")
+            bot.send_message(
+                call.message.chat.id,
+                "❌ هذا المنتج نفد من المخزون."
+            )
             return
 
         # حساب سعر LTC
@@ -147,22 +180,24 @@ def register_user_handlers(bot: telebot.TeleBot):
 
             # إنشاء عنوان دفع من LitePay
             r = requests.get(
-                "https://litepay.ch/api/create",
+                "https://litepay.ch/api/crypto_payment",
                 params={
                     "currency": "ltc",
                     "address": LTC_WALLET,
-                    "callback": f"{BASE_URL}/callback"
+                    "callback_url": f"{BASE_URL}/callback"
                 },
                 timeout=15
             )
 
+            print("LitePay Response:", r.text)
+
             data = r.json()
 
-            print(data)
-
-            pay_address = data["address"]
+            # عنوان الدفع المؤقت
+            pay_address = data["payment_address"]
 
         except requests.exceptions.Timeout:
+
             bot.send_message(
                 call.message.chat.id,
                 "❌ انتهت مهلة الاتصال، حاول مجدداً."
@@ -210,7 +245,9 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda c: c.data == "my_orders")
     def orders_cb(call):
+
         bot.answer_callback_query(call.id)
+
         show_orders(call.message.chat.id)
 
     def show_orders(chat_id):
@@ -218,7 +255,10 @@ def register_user_handlers(bot: telebot.TeleBot):
         orders = get_user_orders(chat_id)
 
         if not orders:
-            bot.send_message(chat_id, "📭 لا توجد طلبات سابقة.")
+            bot.send_message(
+                chat_id,
+                "📭 لا توجد طلبات سابقة."
+            )
             return
 
         text = "📦 *آخر طلباتك:*\n\n"
@@ -235,4 +275,4 @@ def register_user_handlers(bot: telebot.TeleBot):
             chat_id,
             text,
             parse_mode="Markdown"
-                        )
+            )
