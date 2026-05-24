@@ -1,13 +1,13 @@
 import requests
 
 def get_ltc_price_usd() -> float:
-    """جلب سعر LTC الحالي بالدولار"""
+    """جلب سعر LTC الحالي بالدولار من LitePay"""
     try:
         r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price?ids=litecoin&vs_currencies=usd",
+            "https://litepay.ch/api/fiat_rates",
             timeout=10
         )
-        return r.json()["litecoin"]["usd"]
+        return float(r.json()["LTC"]["USD"])
     except Exception:
         return 80.0  # fallback لو فشل الاتصال
 
