@@ -2,7 +2,12 @@ from flask import Flask, request
 import telebot
 
 from config import BOT_TOKEN, ADMIN_IDS
-from database import get_payment_by_address, mark_paid, get_available_item, mark_item_sold
+from database import (
+    get_payment_by_address,
+    mark_paid,
+    get_available_item,
+    mark_item_sold
+)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
@@ -10,24 +15,26 @@ app = Flask(__name__)
 
 @app.route('/callback')
 def callback():
-    txid    = request.args.get('transaction_hash')
+    txid = request.args.get('transaction_hash')
     address = request.args.get('input_address')
-    value   = request.args.get('value', 0)  # بالـ litoshi
+    value = request.args.get('value', 0)
 
     if not txid or not address:
         return "error", 400
 
     payment = get_payment_by_address(address)
+
     if not payment:
         return "ok"
 
     pay_id, user_id, product_id, amount_usd, amount_ltc, addr, old_txid, paid, created_at = payment
 
-    # تحويل من litoshi لـ LTC
+    # تحويل من litoshi إلى LTC
     received_ltc = float(value) / 1e8
 
-    # ── تحقق من المبلغ (هامش 1%) ──────────────────────
+    # تحقق من المبلغ
     required_ltc = float(amount_ltc) * 0.99
+
     if received_ltc < required_ltc:
         bot.send_message(
             user_id,
@@ -40,16 +47,18 @@ def callback():
         )
         return "ok"
 
-    # ── Atomic - يمنع التسليم المزدوج ─────────────────
+    # منع التكرار
     updated = mark_paid(txid, address)
+
     if updated == 0:
         return "ok"
 
-    # ── تسليم تلقائي ───────────────────────────────────
+    # تسليم المنتج
     item = get_available_item(product_id)
 
     if item:
         item_id, content = item
+
         mark_item_sold(item_id, product_id)
 
         bot.send_message(
@@ -61,8 +70,8 @@ def callback():
             f"🔗 TXID:\n`{txid}`",
             parse_mode="Markdown"
         )
+
     else:
-        # نفذ المخزون
         bot.send_message(
             user_id,
             f"✅ تم استلام دفعتك `${amount_usd}`\n"
@@ -70,6 +79,7 @@ def callback():
             f"TXID: `{txid}`",
             parse_mode="Markdown"
         )
+
         for admin_id in ADMIN_IDS:
             try:
                 bot.send_message(
@@ -94,7 +104,7 @@ def index():
 if __name__ == '__main__':
     import os
 
-app.run(
-    host='0.0.0.0',
-    port=int(os.environ.get("PORT", 8080))
-)
+    app.run(
+        host='0.0.0.0',
+        port=int(os.environ.get("PORT", 8080))
+    )
