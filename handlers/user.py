@@ -1,8 +1,9 @@
 import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from urllib.parse import urlencode
 
-from config import LTC_WALLET, BASE_URL, API_URL
+from config import LTC_WALLET, BASE_URL, API_URL, CALLBACK_SECRET
 from database import (
     get_all_products,
     get_product,
@@ -48,9 +49,7 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda c: c.data == "shop")
     def shop_cb(call):
-
         bot.answer_callback_query(call.id)
-
         show_shop(call.message.chat.id)
 
     def show_shop(chat_id):
@@ -58,18 +57,13 @@ def register_user_handlers(bot: telebot.TeleBot):
         products = get_all_products()
 
         if not products:
-            bot.send_message(
-                chat_id,
-                "❌ لا توجد منتجات متاحة حالياً."
-            )
+            bot.send_message(chat_id, "❌ لا توجد منتجات متاحة حالياً.")
             return
 
         markup = InlineKeyboardMarkup()
 
         for p in products:
-
             pid, name, desc, price_usd, stock, active = p
-
             cnt = get_stock_count(pid)
 
             if cnt > 0:
@@ -78,10 +72,7 @@ def register_user_handlers(bot: telebot.TeleBot):
                 label = f"❌ {name} (نفذ)"
 
             markup.add(
-                InlineKeyboardButton(
-                    label,
-                    callback_data=f"product_{pid}"
-                )
+                InlineKeyboardButton(label, callback_data=f"product_{pid}")
             )
 
         bot.send_message(
@@ -97,20 +88,14 @@ def register_user_handlers(bot: telebot.TeleBot):
         bot.answer_callback_query(call.id)
 
         product_id = int(call.data.split("_")[1])
-
         p = get_product(product_id)
 
         if not p:
-            bot.send_message(
-                call.message.chat.id,
-                "❌ المنتج غير موجود."
-            )
+            bot.send_message(call.message.chat.id, "❌ المنتج غير موجود.")
             return
 
         pid, name, desc, price_usd, stock, active = p
-
         cnt = get_stock_count(pid)
-
         ltc_price = usd_to_ltc(price_usd)
 
         text = (
@@ -125,17 +110,11 @@ def register_user_handlers(bot: telebot.TeleBot):
 
         if cnt > 0:
             markup.add(
-                InlineKeyboardButton(
-                    "💳 اشتري الآن",
-                    callback_data=f"buy_{pid}"
-                )
+                InlineKeyboardButton("💳 اشتري الآن", callback_data=f"buy_{pid}")
             )
 
         markup.add(
-            InlineKeyboardButton(
-                "🔙 رجوع",
-                callback_data="shop"
-            )
+            InlineKeyboardButton("🔙 رجوع", callback_data="shop")
         )
 
         bot.send_message(
@@ -148,43 +127,37 @@ def register_user_handlers(bot: telebot.TeleBot):
     @bot.callback_query_handler(func=lambda c: c.data.startswith("buy_"))
     def buy_product(call):
 
-        bot.answer_callback_query(
-            call.id,
-            "⏳ جاري إنشاء الفاتورة..."
-        )
+        bot.answer_callback_query(call.id, "⏳ جاري إنشاء الفاتورة...")
 
         product_id = int(call.data.split("_")[1])
-
         p = get_product(product_id)
 
         if not p:
-            bot.send_message(
-                call.message.chat.id,
-                "❌ المنتج غير موجود."
-            )
+            bot.send_message(call.message.chat.id, "❌ المنتج غير موجود.")
             return
 
         pid, name, desc, price_usd, stock, active = p
 
         if get_stock_count(pid) == 0:
-            bot.send_message(
-                call.message.chat.id,
-                "❌ هذا المنتج نفد من المخزون."
-            )
+            bot.send_message(call.message.chat.id, "❌ هذا المنتج نفد من المخزون.")
             return
 
-        # حساب سعر LTC
         ltc_amount = usd_to_ltc(price_usd)
 
         try:
+            # بناء callback URL مع secret و payment_id
+            callback_params = urlencode({
+                "secret": CALLBACK_SECRET,
+                "product_id": pid
+            })
+            callback_url = f"https://{BASE_URL}/callback?{callback_params}"
 
-            # إنشاء عنوان دفع من LitePay
             r = requests.get(
                 API_URL,
                 params={
-                    "method": "litecoin",
+                    "method": "ltc",
                     "address": LTC_WALLET,
-                    "callback": f"https://{BASE_URL}/callback"
+                    "callback": callback_url
                 },
                 timeout=15
             )
@@ -195,28 +168,21 @@ def register_user_handlers(bot: telebot.TeleBot):
 
             print("LitePay Keys:", list(data.keys()))
 
-            # عنوان الدفع المؤقت
-            pay_address = data.get("payment_address") or data.get("address")
+            if data.get("status") != "success":
+                raise Exception(f"LitePay error: {data}")
+
+            pay_address = data.get("address")
 
             if not pay_address:
                 raise Exception(f"لم يتم استلام عنوان الدفع: {data}")
 
         except requests.exceptions.Timeout:
-
-            bot.send_message(
-                call.message.chat.id,
-                "❌ انتهت مهلة الاتصال، حاول مجدداً."
-            )
+            bot.send_message(call.message.chat.id, "❌ انتهت مهلة الاتصال، حاول مجدداً.")
             return
 
         except Exception as e:
-
             print("LitePay Error:", e)
-
-            bot.send_message(
-                call.message.chat.id,
-                "❌ خطأ في إنشاء الفاتورة، حاول لاحقاً."
-            )
+            bot.send_message(call.message.chat.id, "❌ خطأ في إنشاء الفاتورة، حاول لاحقاً.")
             return
 
         # حفظ الطلب
@@ -250,9 +216,7 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda c: c.data == "my_orders")
     def orders_cb(call):
-
         bot.answer_callback_query(call.id)
-
         show_orders(call.message.chat.id)
 
     def show_orders(chat_id):
@@ -260,24 +224,14 @@ def register_user_handlers(bot: telebot.TeleBot):
         orders = get_user_orders(chat_id)
 
         if not orders:
-            bot.send_message(
-                chat_id,
-                "📭 لا توجد طلبات سابقة."
-            )
+            bot.send_message(chat_id, "📭 لا توجد طلبات سابقة.")
             return
 
         text = "📦 *آخر طلباتك:*\n\n"
 
         for o in orders:
-
             oid, uid, pid, amt_usd, amt_ltc, address, txid, paid, created_at, pname = o
-
             status = "✅ مدفوع" if paid else "⏳ انتظار"
-
             text += f"• {pname} — ${amt_usd} — {status}\n"
 
-        bot.send_message(
-            chat_id,
-            text,
-            parse_mode="Markdown"
-        )
+        bot.send_message(chat_id, text, parse_mode="Markdown")
