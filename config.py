@@ -5,4 +5,6 @@ LTC_WALLET = "ltc1qwzrgzkze5aey9wg2jp2vn8y4933xzuqjmutxnl"
 BASE_URL = "bot1-production-a903.up.railway.app"
 API_URL = "https://litepay.ch/api/receive"
 
+CALLBACK_SECRET = "my_secret_passphrase"
+
 PRICE_LTC = 0.05  # السعر الافتراضي لكل منتج
