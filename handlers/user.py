@@ -2,7 +2,7 @@ import requests
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import LTC_WALLET, BASE_URL
+from config import LTC_WALLET, BASE_URL, API_URL
 from database import (
     get_all_products,
     get_product,
@@ -180,21 +180,26 @@ def register_user_handlers(bot: telebot.TeleBot):
 
             # إنشاء عنوان دفع من LitePay
             r = requests.get(
-                "https://litepay.ch/api/crypto_payment",
+                API_URL,
                 params={
-                    "currency": "ltc",
+                    "method": "litecoin",
                     "address": LTC_WALLET,
-                    "callback_url": f"{BASE_URL}/callback"
+                    "callback": f"https://{BASE_URL}/callback"
                 },
                 timeout=15
             )
 
-            print("LitePay Response:", r.text)
+            print("LitePay Response:", r.status_code, r.text)
 
             data = r.json()
 
+            print("LitePay Keys:", list(data.keys()))
+
             # عنوان الدفع المؤقت
-            pay_address = data["payment_address"]
+            pay_address = data.get("payment_address") or data.get("address")
+
+            if not pay_address:
+                raise Exception(f"لم يتم استلام عنوان الدفع: {data}")
 
         except requests.exceptions.Timeout:
 
@@ -275,4 +280,4 @@ def register_user_handlers(bot: telebot.TeleBot):
             chat_id,
             text,
             parse_mode="Markdown"
-            )
+        )
