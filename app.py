@@ -3,7 +3,7 @@ import telebot
 import threading
 import os
 
-from config import BOT_TOKEN, ADMIN_IDS
+from config import BOT_TOKEN, ADMIN_IDS, CALLBACK_SECRET
 from database import (
     get_payment_by_address,
     mark_paid,
@@ -17,16 +17,24 @@ from handlers.admin import register_admin_handlers
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-# تسجيل الهاندلرز
 register_user_handlers(bot)
 register_admin_handlers(bot)
 
 
 @app.route('/callback')
 def callback():
+
+    # التحقق من الـ secret
+    secret = request.args.get('secret')
+    if secret != CALLBACK_SECRET:
+        print("Callback: secret غير صحيح")
+        return "forbidden", 403
+
     txid = request.args.get('transaction_hash')
     address = request.args.get('input_address')
     value = request.args.get('value', 0)
+
+    print(f"Callback received: address={address}, txid={txid}, value={value}")
 
     if not txid or not address:
         return "error", 400
@@ -34,6 +42,7 @@ def callback():
     payment = get_payment_by_address(address)
 
     if not payment:
+        print("Callback: عنوان غير موجود في DB")
         return "ok"
 
     pay_id, user_id, product_id, amount_usd, amount_ltc, addr, old_txid, paid, created_at = payment
@@ -41,7 +50,7 @@ def callback():
     # تحويل من litoshi إلى LTC
     received_ltc = float(value) / 1e8
 
-    # تحقق من المبلغ
+    # تحقق من المبلغ (هامش 1%)
     required_ltc = float(amount_ltc) * 0.99
 
     if received_ltc < required_ltc:
@@ -60,6 +69,7 @@ def callback():
     updated = mark_paid(txid, address)
 
     if updated == 0:
+        print("Callback: طلب مدفوع مسبقاً")
         return "ok"
 
     # تسليم المنتج
@@ -67,7 +77,6 @@ def callback():
 
     if item:
         item_id, content = item
-
         mark_item_sold(item_id, product_id)
 
         bot.send_message(
@@ -112,14 +121,12 @@ def index():
 
 if __name__ == '__main__':
 
-    # تشغيل البوت بخلفية
     threading.Thread(
         target=bot.infinity_polling,
         daemon=True
     ).start()
 
-    # تشغيل Flask
     app.run(
         host='0.0.0.0',
         port=int(os.environ.get("PORT", 8080))
-    )
+        )
