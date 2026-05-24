@@ -37,13 +37,13 @@ def callback():
     print(f"Callback received: address={address}, txid={txid}, value={value}")
 
     if not txid or not address:
-        return "error", 400
+        return "*ok*"
 
     payment = get_payment_by_address(address)
 
     if not payment:
         print("Callback: عنوان غير موجود في DB")
-        return "ok"
+        return "*ok*"
 
     pay_id, user_id, product_id, amount_usd, amount_ltc, addr, old_txid, paid, created_at = payment
 
@@ -63,14 +63,14 @@ def callback():
             f"أرسل المبلغ الكامل لنفس العنوان لإكمال الطلب.",
             parse_mode="Markdown"
         )
-        return "ok"
+        return "*ok*"
 
     # منع التكرار
     updated = mark_paid(txid, address)
 
     if updated == 0:
         print("Callback: طلب مدفوع مسبقاً")
-        return "ok"
+        return "*ok*"
 
     # تسليم المنتج
     item = get_available_item(product_id)
@@ -111,7 +111,7 @@ def callback():
             except Exception:
                 pass
 
-    return "ok"
+    return "*ok*"
 
 
 @app.route('/')
@@ -129,4 +129,4 @@ if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
         port=int(os.environ.get("PORT", 8080))
-        )
+    )
