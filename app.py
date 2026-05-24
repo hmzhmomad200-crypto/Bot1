@@ -1,5 +1,7 @@
 from flask import Flask, request
 import telebot
+import threading
+import os
 
 from config import BOT_TOKEN, ADMIN_IDS
 from database import (
@@ -9,8 +11,15 @@ from database import (
     mark_item_sold
 )
 
+from handlers.user import register_user_handlers
+from handlers.admin import register_admin_handlers
+
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
+
+# تسجيل الهاندلرز
+register_user_handlers(bot)
+register_admin_handlers(bot)
 
 
 @app.route('/callback')
@@ -102,8 +111,14 @@ def index():
 
 
 if __name__ == '__main__':
-    import os
 
+    # تشغيل البوت بخلفية
+    threading.Thread(
+        target=bot.infinity_polling,
+        daemon=True
+    ).start()
+
+    # تشغيل Flask
     app.run(
         host='0.0.0.0',
         port=int(os.environ.get("PORT", 8080))
